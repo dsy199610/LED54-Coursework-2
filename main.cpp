@@ -42,7 +42,7 @@ int8_t lead = 2;
 int8_t intState = 0;
 int8_t orState = 0;
 uint64_t c;
-char newCmd[10];
+char newCmd[18];
 Timer t;
 
 //Status LED
@@ -181,7 +181,7 @@ void commInFn(){
                 }
             }
         else{
-            if(newCmd[0] == 'K' && i == 9){
+            if(newCmd[0] == 'K' && i == 17){
                 pc.printf("Invalid\n\r");
                 i = 0;
                 }
