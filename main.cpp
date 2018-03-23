@@ -38,17 +38,12 @@ const int8_t stateMap[] = {0x07,0x05,0x03,0x04,0x01,0x00,0x02,0x07};
 //const int8_t stateMap[] = {0x07,0x01,0x03,0x02,0x05,0x00,0x04,0x07}; //Alternative if phase order of input or drive is reversed
 
 //Phase lead to make motor spin
-int8_t lead = 2;  //2 for forwards, -2 for backwards
-
-//
+int8_t lead = 2;                
 int8_t intState = 0;
 int8_t orState = 0;
-
-
-
 uint64_t c;
-
 char newCmd[10];
+Timer t;
 
 //Status LED
 DigitalOut led1(LED1);
@@ -60,6 +55,7 @@ InterruptIn I3(I3pin);
 Thread commOutT(osPriorityNormal, 1024);
 Thread commInT(osPriorityNormal, 1024);
 Thread motorCtrlT (osPriorityNormal, 1024);
+
 volatile uint64_t newKey;
 Mutex newKey_mutex;
 int32_t MotorTorque;
@@ -92,7 +88,6 @@ DigitalOut L3H(L3Hpin);
 //Set a given drive state
 void motorOut(int8_t driveState, uint32_t MotorTorque)
 {
-
     //Lookup the output byte from the drive state.
     int8_t driveOut = driveTable[driveState & 0x07];
 
@@ -114,24 +109,20 @@ void motorOut(int8_t driveState, uint32_t MotorTorque)
 }
 
 //Convert photointerrupter inputs to a rotor state
-inline int8_t readRotorState()
-{
+inline int8_t readRotorState(){
     return stateMap[I1 + 2*I2 + 4*I3];
 }
 
 //Basic synchronisation routine
-int8_t motorHome()
-{
+int8_t motorHome(){
     //Put the motor in drive state 0 and wait for it to stabilise
     motorOut(0, 1000);
     wait(2.0);
-
     //Get the rotor state
     return readRotorState();
 }
 
-void ISR_OUT()
-{
+void ISR_OUT(){
     static int8_t oldRotorState;
     int8_t rotorState = readRotorState();
     //Poll the rotor state and set the motor outputs accordingly to spin the motor 
@@ -151,23 +142,20 @@ void commOutFn(){
     }
 }
 
-void putMessage(type0 t, uint32_t data)
-{
+void putMessage(type0 t, uint32_t data){
     message_t *pMessage = outMessages.alloc();
     pMessage->mes_type = t;
     pMessage->data = data;
     outMessages.put(pMessage);
 }
 
-void serialISR()
-{
+void serialISR(){
     uint8_t newChar = pc.getc();
     inCharQ.put((void*)newChar);
 }
 
 
-void commInFn()
-{
+void commInFn(){
     pc.attach(&serialISR);
     int i = 0;
     while(1) {
@@ -214,16 +202,15 @@ void motorCtrlFn(){
     motorCtrlTicker.attach_us(&motorCtrlTick,50000); 
     count_iter = 0;
     int32_t oldmotorPosition = 0;
-    while(1){ 
-        int32_t position = motorPosition;      
+    while(1){      
         motorCtrlT.signal_wait(0x1);
+        int32_t position = motorPosition; 
+        velocity = (position - oldmotorPosition)*20;
         
         if(count_iter % 20 == 0){
          putMessage(motorpos, motorPosition/5);
          putMessage(motorvelo, velocity/5);  
         }
-        
-        velocity = (position - oldmotorPosition)*20;
         oldmotorPosition = position;
         count_iter++;
 
@@ -234,12 +221,12 @@ void motorCtrlFn(){
             }
             else if((setposition*5-position) == 0){
                outspeed = 0;
-                }
+            }
             else{
                outspeed = 25*(abs(velocity) - maxspeed*5);
-               }
+            }
                      
-            outposition = 25*(setposition*5-position) + 20*(setposition*5-position)*20;
+            outposition = 25*(setposition*5-position) - 7*velocity;
             
             if(velocity < 0){
                 if(outspeed >  outposition){
@@ -247,7 +234,7 @@ void motorCtrlFn(){
                 }
                 else{
                     MotorTorque = outposition;
-                    }
+                }
             }
             else{
                 if(outspeed > outposition){
@@ -255,27 +242,23 @@ void motorCtrlFn(){
                 }
                 else{
                     MotorTorque = outspeed;
-                    }
                 }
+            }
             
             if(MotorTorque < 0){
                 MotorTorque = -MotorTorque;
                 lead = -2;
             }
-            else{
+            else if ( 0 <= MotorTorque <= 1000 ){
                 lead = 2;
             }
             
-            if(MotorTorque > 1000){
+            else{
                 MotorTorque = 1000;
-                }
+            }
         } 
     }
 }
-
-
-
-Timer t;
 
 //Main
 int main()
